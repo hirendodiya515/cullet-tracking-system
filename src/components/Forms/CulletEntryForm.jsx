@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { collection, addDoc, getDocs, doc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, doc, getDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../context/AuthContext';
-import { CheckCircle, AlertCircle, Save, Scale, Box, Hash, ChevronDown, Layers } from 'lucide-react';
+import { CheckCircle, AlertCircle, Save, Scale, Box, Hash, ChevronDown, Layers, Calendar } from 'lucide-react';
 
 export default function CulletEntryForm({ externalStationId, onStationChange, onSuccessCallback }) {
   const { currentUser } = useAuth();
@@ -12,6 +12,12 @@ export default function CulletEntryForm({ externalStationId, onStationChange, on
 
   const [stationId, setStationId] = useState(externalStationId || '');
   const [stations, setStations] = useState([]);
+  
+  // Date Picker State (Defaults to today in local YYYY-MM-DD)
+  const [entryDate, setEntryDate] = useState(() => {
+    const d = new Date();
+    return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+  });
   
   // Dynamic Form State
   const [config, setConfig] = useState(null); 
@@ -139,11 +145,22 @@ export default function CulletEntryForm({ externalStationId, onStationChange, on
         parsedData[k] = Number(formData[k]) || formData[k];
       });
 
+      // Calculate real timestamp based on selected date
+      let entryTimestamp;
+      const todayStr = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+      
+      if (entryDate === todayStr) {
+         entryTimestamp = serverTimestamp(); // Use exact server time if it's today
+      } else {
+         // Use noon of the selected date to avoid timezone boundary jump issues
+         entryTimestamp = Timestamp.fromDate(new Date(`${entryDate}T12:00:00`));
+      }
+
       await addDoc(collection(db, 'cullet_entries'), {
         station_id: stationId,
         ...parsedData,
         weight: parseFloat(weight.toFixed(3)),
-        timestamp: serverTimestamp(),
+        timestamp: entryTimestamp,
         operator_id: currentUser.uid,
         operator_email: currentUser.email
       });
@@ -205,25 +222,49 @@ export default function CulletEntryForm({ externalStationId, onStationChange, on
 
         <form onSubmit={handleSubmit} className="space-y-5 relative z-10">
         
-          {/* Station Selection Dropdown */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Station Location</label>
-            <div className="relative">
-              <select 
-                className="input-field bg-slate-50 border-slate-200 text-sm py-2.5 cursor-pointer appearance-none"
-                value={stationId}
-                onChange={handleStationChange}
-                required
-              >
-                <option value="" disabled>-- Select Station --</option>
-                {stations.map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.line ? `${s.line} - ` : ''}{s.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+          {/* Top Controls: Station & Date */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            
+            {/* Station Selection Dropdown */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Station Location</label>
+              <div className="relative">
+                <select 
+                  className="input-field bg-slate-50 border-slate-200 text-sm py-2.5 cursor-pointer appearance-none"
+                  value={stationId}
+                  onChange={handleStationChange}
+                  required
+                >
+                  <option value="" disabled>-- Select Station --</option>
+                  {stations.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.line ? `${s.line} - ` : ''}{s.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              </div>
             </div>
+
+            {/* Date Picker */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Entry Date</label>
+              <div className="relative">
+                <input 
+                  type="date"
+                  className="input-field bg-slate-50 border-slate-200 text-sm py-2.5 cursor-pointer pl-10"
+                  value={entryDate}
+                  onChange={(e) => setEntryDate(e.target.value)}
+                  max={(() => {
+                    const d = new Date();
+                    return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+                  })()}
+                  required
+                />
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              </div>
+            </div>
+
           </div>
 
           {/* Dynamic Fields Area */}

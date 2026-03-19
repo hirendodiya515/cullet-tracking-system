@@ -43,12 +43,25 @@ export default function Dashboard() {
   const [lineData, setLineData] = useState([]);
   const [timeTrendData, setTimeTrendData] = useState([]);
   const [activeLines, setActiveLines] = useState([]);
+  const [trimTrendData, setTrimTrendData] = useState([]);
+  const [activeTrimLines, setActiveTrimLines] = useState([]);
   
   useEffect(() => {
     const fetchStats = async () => {
       try {
         const q = query(collection(db, 'cullet_entries'), orderBy('timestamp', 'desc'));
-        const querySnapshot = await getDocs(q);
+        
+        // Fetch both entries and stations to resolve relational data
+        const [querySnapshot, stationsSnapshot] = await Promise.all([
+           getDocs(q),
+           getDocs(collection(db, 'stations'))
+        ]);
+        
+        const stationsMap = {};
+        stationsSnapshot.docs.forEach(d => {
+           stationsMap[d.id] = d.data();
+        });
+
         const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         
         const now = new Date();
@@ -64,12 +77,15 @@ export default function Dashboard() {
 
         const stationWeights = {};
         const lineWeights = {};
+        const trimLineWeights = {}; // to track active trim lines
         
         // Prepare time trend skeleton
         const last7Days = getLast7Days();
         const timeSeriesMap = {};
+        const trimSeriesMap = {};
         last7Days.forEach(day => {
           timeSeriesMap[day.dateKey] = { date: day.dateStr };
+          trimSeriesMap[day.dateKey] = { date: day.dateStr };
         });
 
         // Aggregate
@@ -77,6 +93,12 @@ export default function Dashboard() {
           const entryDate = entry.timestamp ? new Date(entry.timestamp.toMillis()) : new Date();
           const weight = Number(entry.weight) || 0;
           const pieces = Number(entry.formData?.quantity || entry.formData?.pieces || 0);
+          
+          // Resolve actual station info
+          const stationInfo = stationsMap[entry.station_id] || {};
+          const lineName = entry.line || stationInfo.line || 'Unassigned';
+          const stationName = entry.stationName || stationInfo.name || 'Unknown';
+          const type = entry.type || stationInfo.type || 'Unknown';
           
           if (entryDate >= sevenDaysAgo) {
             currentWeekWeight += weight;
@@ -86,16 +108,17 @@ export default function Dashboard() {
             const localISODate = new Date(entryDate.getTime() - (entryDate.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
             
             if (timeSeriesMap[localISODate]) {
-               const lineName = entry.line || 'Unassigned';
                timeSeriesMap[localISODate][lineName] = (timeSeriesMap[localISODate][lineName] || 0) + weight;
+               
+               if (type === 'TrimCrusher') {
+                  trimSeriesMap[localISODate][lineName] = (trimSeriesMap[localISODate][lineName] || 0) + weight;
+                  trimLineWeights[lineName] = true; // track that this line exists in TrimCrusher
+               }
             }
             
             // Bar and Pie Charts
-            const sName = entry.stationName || 'Unknown';
-            stationWeights[sName] = (stationWeights[sName] || 0) + weight;
-            
-            const lName = entry.line || 'Unassigned';
-            lineWeights[lName] = (lineWeights[lName] || 0) + weight;
+            stationWeights[stationName] = (stationWeights[stationName] || 0) + weight;
+            lineWeights[lineName] = (lineWeights[lineName] || 0) + weight;
             
           } else if (entryDate >= fourteenDaysAgo) {
             previousWeekWeight += weight;
@@ -125,6 +148,9 @@ export default function Dashboard() {
 
         const linesList = Object.keys(lineWeights);
         setActiveLines(linesList);
+        
+        const trimLinesList = Object.keys(trimLineWeights);
+        setActiveTrimLines(trimLinesList);
 
         const formattedLineData = linesList.map(k => ({ name: k, value: Number(lineWeights[k].toFixed(2)) }));
         setLineData(formattedLineData);
@@ -138,6 +164,16 @@ export default function Dashboard() {
           return obj;
         });
         setTimeTrendData(formattedTimeTrend);
+
+        const formattedTrimTrend = last7Days.map(day => {
+          const obj = { ...trimSeriesMap[day.dateKey] };
+          trimLinesList.forEach(l => {
+            if (obj[l] === undefined) obj[l] = 0;
+            else obj[l] = Number(obj[l].toFixed(2));
+          });
+          return obj;
+        });
+        setTrimTrendData(formattedTrimTrend);
 
       } catch (error) {
         console.error("Error fetching stats:", error);
@@ -213,9 +249,9 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Charts Grid */}
           
-          {/* Time Trend */}
+          {/* Time Trend - All Lines */}
           <div className="card lg:col-span-2">
-            <h3 className="text-lg font-bold text-slate-800 mb-6">Daily Trend (Line-wise)</h3>
+            <h3 className="text-lg font-bold text-slate-800 mb-6">Daily Trend (All Lines)</h3>
             <div className="h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={timeTrendData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
@@ -240,6 +276,45 @@ export default function Dashboard() {
                 </LineChart>
               </ResponsiveContainer>
             </div>
+          </div>
+
+          {/* Time Trend - Trim Crushers Only */}
+          <div className="card lg:col-span-2">
+            <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+              <Activity className="w-5 h-5 text-indigo-500" />
+              Trim Crusher Trend (Line-wise)
+            </h3>
+            
+            {activeTrimLines.length === 0 ? (
+              <div className="h-40 flex items-center justify-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                No Trim Crusher data logged in the last 7 days.
+              </div>
+            ) : (
+              <div className="h-80 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={trimTrendData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} dy={10} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} dx={-10} />
+                    <Tooltip 
+                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                    />
+                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                    {activeTrimLines.map((lineName, i) => (
+                      <Line 
+                        key={lineName} 
+                        type="monotone" 
+                        dataKey={lineName} 
+                        stroke={COLORS[(i + 3) % COLORS.length]} // Just offset the colors so they look distinct
+                        strokeWidth={3} 
+                        activeDot={{ r: 8 }} 
+                        name={lineName}
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </div>
 
           {/* Station Wise Bar Chart */}
