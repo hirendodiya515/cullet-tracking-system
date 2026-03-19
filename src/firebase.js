@@ -3,14 +3,14 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// TODO: Replace with your Firebase config from Firebase Console
+// Read Firebase config from environment variables
 const firebaseConfig = {
-  apiKey: "AIzaSyBIqvm26c6E1YQSZ4Mt_06I9FD4_XIhyZY",
-  authDomain: "cullet-management-system.firebaseapp.com",
-  projectId: "cullet-management-system",
-  storageBucket: "cullet-management-system.firebasestorage.app",
-  messagingSenderId: "740634779937",
-  appId: "1:740634779937:web:b417db6c9188cdf8ba9e60"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 const app = initializeApp(firebaseConfig);
