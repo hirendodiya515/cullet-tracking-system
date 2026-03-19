@@ -19,8 +19,12 @@ const getLast7Days = () => {
   for (let i = 6; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
+    
+    const day = d.getDate().toString().padStart(2, '0');
+    const month = d.toLocaleString('en-US', { month: 'short' });
+    
     result.push({
-      dateStr: d.toLocaleString('en-US', { weekday: 'short' }), // "Mon", "Tue"
+      dateStr: `${day}-${month}`, // "15-Mar"
       dateKey: d.toISOString().split('T')[0] // local ISO split approx
     });
   }
@@ -126,10 +130,24 @@ export default function Dashboard() {
           }
         });
 
+        // Calculate Active Operating Days (Option 1)
+        let activeDaysCount = 0;
+        last7Days.forEach(day => {
+          let hasData = false;
+          Object.keys(timeSeriesMap[day.dateKey]).forEach(key => {
+            if (key !== 'date' && timeSeriesMap[day.dateKey][key] > 0) {
+              hasData = true;
+            }
+          });
+          if (hasData) activeDaysCount++;
+        });
+
+        const activeDaysDivisor = activeDaysCount > 0 ? activeDaysCount : 1;
+
         // Calculate final UI metrics
         setTotalWeight(currentWeekWeight);
         setTotalPieces(currentWeekPieces);
-        setAvgDaily((currentWeekWeight / 7));
+        setAvgDaily((currentWeekWeight / activeDaysDivisor));
         
         if (previousWeekWeight > 0) {
           setWeightTrend(((currentWeekWeight - previousWeekWeight) / previousWeekWeight) * 100);

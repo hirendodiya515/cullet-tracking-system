@@ -14,9 +14,9 @@ export default function StatCard({ title, value, unit, icon, trend, trendLabel }
         </div>
       </div>
       
-      {trend && (
+      {typeof trend === 'number' && (
         <div className="mt-4 flex items-center text-sm">
-          <span className={`font-medium ${trend > 0 ? 'text-green-600' : 'text-red-600'}`}>
+          <span className={`font-medium ${trend > 0 ? 'text-green-600' : trend < 0 ? 'text-red-600' : 'text-slate-500'}`}>
             {trend > 0 ? '+' : ''}{trend}%
           </span>
           <span className="ml-2 text-slate-500">{trendLabel}</span>
