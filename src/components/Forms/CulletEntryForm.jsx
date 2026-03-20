@@ -25,6 +25,10 @@ export default function CulletEntryForm({ externalStationId, onStationChange, on
   const [weight, setWeight] = useState(0); 
   const [globalDensity, setGlobalDensity] = useState(2500);
 
+  // Direct Entry State
+  const [entryMode, setEntryMode] = useState('calculated'); // 'calculated' | 'direct'
+  const [directWeight, setDirectWeight] = useState('');
+
   useEffect(() => {
     if (externalStationId && externalStationId !== stationId) {
       setStationId(externalStationId);
@@ -125,7 +129,10 @@ export default function CulletEntryForm({ externalStationId, onStationChange, on
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (weight <= 0) {
+    
+    const finalWeight = entryMode === 'calculated' ? weight : parseFloat(Number(directWeight).toFixed(3));
+    
+    if (finalWeight <= 0 || isNaN(finalWeight)) {
       setError("Calculated metric must be greater than zero. Check your inputs.");
       return;
     }
@@ -141,9 +148,11 @@ export default function CulletEntryForm({ externalStationId, onStationChange, on
     try {
       // Format number fields into numbers before sending to database
       const parsedData = {};
-      Object.keys(formData).forEach(k => {
-        parsedData[k] = Number(formData[k]) || formData[k];
-      });
+      if (entryMode === 'calculated') {
+        Object.keys(formData).forEach(k => {
+          parsedData[k] = Number(formData[k]) || formData[k];
+        });
+      }
 
       // Calculate real timestamp based on selected date
       let entryTimestamp;
@@ -159,7 +168,8 @@ export default function CulletEntryForm({ externalStationId, onStationChange, on
       await addDoc(collection(db, 'cullet_entries'), {
         station_id: stationId,
         ...parsedData,
-        weight: parseFloat(weight.toFixed(3)),
+        weight: finalWeight,
+        entry_mode: entryMode,
         timestamp: entryTimestamp,
         operator_id: currentUser.uid,
         operator_email: currentUser.email
@@ -168,16 +178,20 @@ export default function CulletEntryForm({ externalStationId, onStationChange, on
       setSuccess(true);
       
       // Reset strictly user-input fields, but keep hidden/default constants intact
-      if (config && config.fields) {
-        setFormData(prev => {
-          const resetData = { ...prev };
-          config.fields.forEach(f => {
-             if (f.type !== 'hidden' && !f.defaultValue) {
-               resetData[f.id] = '';
-             }
+      if (entryMode === 'calculated') {
+        if (config && config.fields) {
+          setFormData(prev => {
+            const resetData = { ...prev };
+            config.fields.forEach(f => {
+               if (f.type !== 'hidden' && !f.defaultValue) {
+                 resetData[f.id] = '';
+               }
+            });
+            return resetData;
           });
-          return resetData;
-        });
+        }
+      } else {
+        setDirectWeight('');
       }
       
       setTimeout(() => {
@@ -267,36 +281,89 @@ export default function CulletEntryForm({ externalStationId, onStationChange, on
 
           </div>
 
-          {/* Dynamic Fields Area */}
+          {/* Dynamic Fields Area / Direct Entry Toggle */}
           {stationId && !config ? (
              <div className="py-6 bg-amber-50 rounded-xl border border-amber-200 text-center text-amber-600 text-sm font-medium">
                No configuration layout found for this station. Please ask an Administrator to design one under the Form Setup dashboard.
              </div>
-          ) : config && config.fields && config.fields.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-inner">
-              {config.fields.filter(f => f.type !== 'hidden').map((field) => (
-                <div key={field.id} className="relative">
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">{field.label}</label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                       {/* Dynamic generic Icon mapping based on naming conventions to look pretty */}
-                       {field.id.includes('length') || field.id.includes('width') ? <Box className="h-4 w-4 text-indigo-400" /> : 
-                        field.id.includes('thickness') ? <Layers className="h-4 w-4 text-indigo-400" /> :
-                        <Hash className="h-4 w-4 text-indigo-400" />}
+          ) : config && (
+            <div className="space-y-4">
+              {/* Entry Mode Toggle */}
+              <div className="flex bg-slate-100 p-1 rounded-lg w-fit">
+                <button
+                  type="button"
+                  onClick={() => setEntryMode('calculated')}
+                  className={`px-4 py-2 text-xs font-semibold rounded-md transition-all ${
+                    entryMode === 'calculated'
+                      ? 'bg-white text-indigo-600 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  By Dimensions
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEntryMode('direct')}
+                  className={`px-4 py-2 text-xs font-semibold rounded-md transition-all ${
+                    entryMode === 'direct'
+                      ? 'bg-white text-indigo-600 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Direct Tonnage
+                </button>
+              </div>
+
+              {entryMode === 'calculated' ? (
+                config.fields && config.fields.length > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-inner">
+                    {config.fields.filter(f => f.type !== 'hidden').map((field) => (
+                      <div key={field.id} className="relative">
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">{field.label}</label>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                             {/* Dynamic generic Icon mapping based on naming conventions to look pretty */}
+                             {field.id.includes('length') || field.id.includes('width') ? <Box className="h-4 w-4 text-indigo-400" /> : 
+                              field.id.includes('thickness') ? <Layers className="h-4 w-4 text-indigo-400" /> :
+                              <Hash className="h-4 w-4 text-indigo-400" />}
+                          </div>
+                          <input 
+                            type={field.type === 'number' ? "number" : "text"} 
+                            min={field.type === 'number' ? "0" : undefined}
+                            step={field.type === 'number' ? "any" : undefined}
+                            className="input-field pl-9 text-sm py-2 bg-white border-slate-200 focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                            value={formData[field.id] !== undefined ? formData[field.id] : ''}
+                            onChange={(e) => handleFieldChange(field.id, e.target.value)}
+                            placeholder={`Enter ${field.label.toLowerCase()}`}
+                            required={field.required !== false} 
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              ) : (
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-inner">
+                  <div className="relative w-full sm:w-1/2">
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Direct Tonnage (Tons)</label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                         <Scale className="h-4 w-4 text-indigo-400" />
+                      </div>
+                      <input 
+                        type="number" 
+                        min="0"
+                        step="0.001"
+                        className="input-field pl-9 text-sm py-2 bg-white border-slate-200 focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                        value={directWeight}
+                        onChange={(e) => setDirectWeight(e.target.value)}
+                        placeholder="Enter weight e.g. 1.250"
+                        required
+                      />
                     </div>
-                    <input 
-                      type={field.type === 'number' ? "number" : "text"} 
-                      min={field.type === 'number' ? "0" : undefined}
-                      step={field.type === 'number' ? "any" : undefined}
-                      className="input-field pl-9 text-sm py-2 bg-white border-slate-200 focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
-                      value={formData[field.id] !== undefined ? formData[field.id] : ''}
-                      onChange={(e) => handleFieldChange(field.id, e.target.value)}
-                      placeholder={`Enter ${field.label.toLowerCase()}`}
-                      required={field.required !== false} 
-                    />
                   </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
 
@@ -309,7 +376,9 @@ export default function CulletEntryForm({ externalStationId, onStationChange, on
               <p className="text-indigo-200 text-xs font-semibold uppercase tracking-wider mb-0.5">Calculated Metric</p>
               <div className="flex items-baseline gap-2">
                 <span className="text-3xl font-bold tracking-tight">
-                  {weight > 0 ? weight.toFixed(3) : '0.000'}
+                  {entryMode === 'calculated'
+                    ? (weight > 0 ? weight.toFixed(3) : '0.000')
+                    : (Number(directWeight) > 0 ? Number(directWeight).toFixed(3) : '0.000')}
                 </span>
                 <span className="text-indigo-200 font-medium text-sm">
                   {config?.unit || 'Tons'}
@@ -323,7 +392,7 @@ export default function CulletEntryForm({ externalStationId, onStationChange, on
 
           <button 
             type="submit" 
-            disabled={loading || weight <= 0}
+            disabled={loading || (entryMode === 'calculated' ? weight <= 0 : Number(directWeight) <= 0)}
             className="btn-primary w-full py-3 text-sm font-semibold tracking-wide flex justify-center items-center gap-2 mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? (
