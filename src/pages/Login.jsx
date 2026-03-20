@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase';
 import { Activity, Lock, Mail } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -11,6 +12,17 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  const { currentUser } = useAuth();
+
+  // React to auth state changes to navigate, to prevent race conditions
+  // where signIn resolves before AuthContext fetches the user's role.
+  useEffect(() => {
+    // Only navigate away if there's a user, the ProtectedRoutes will handle the rest
+    if (currentUser) {
+      navigate('/dashboard'); // or '/' which redirects to dashboard
+    }
+  }, [currentUser, navigate]);
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
@@ -18,13 +30,13 @@ export default function Login() {
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      // ProtectedRoute will handle the redirect based on role
-      navigate('/');
+      // Removed immediate navigate() here because the User Document fetch in AuthContext 
+      // hasn't finished yet, causing ProtectedRoute to bounce back.
+      // The useEffect above will handle navigation when currentUser is fully set.
     } catch (err) {
       setError('Failed to log in. Check credentials and try again.');
-    } finally {
       setLoading(false);
-    }
+    } 
   };
 
   return (
