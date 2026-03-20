@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, getDocs, orderBy, where, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import StatCard from '../components/Dashboard/StatCard';
 import { 
@@ -53,7 +53,13 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const q = query(collection(db, 'cullet_entries'), orderBy('timestamp', 'desc'));
+        const now = new Date();
+        const fourteenDaysAgo = new Date(now);
+        fourteenDaysAgo.setDate(now.getDate() - 14);
+        
+        // Optimize payload by only pulling what Dashboard currently requires (Last 14 days)
+        const timestamp14 = Timestamp.fromDate(fourteenDaysAgo);
+        const q = query(collection(db, 'cullet_entries'), where('timestamp', '>=', timestamp14), orderBy('timestamp', 'desc'));
         
         // Fetch both entries and stations to resolve relational data
         const [querySnapshot, stationsSnapshot] = await Promise.all([
@@ -68,11 +74,9 @@ export default function Dashboard() {
 
         const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         
-        const now = new Date();
+        // Dates already calculated above, but referenced here for array matching logic
         const sevenDaysAgo = new Date(now);
         sevenDaysAgo.setDate(now.getDate() - 7);
-        const fourteenDaysAgo = new Date(now);
-        fourteenDaysAgo.setDate(now.getDate() - 14);
 
         let currentWeekWeight = 0;
         let previousWeekWeight = 0;
@@ -205,10 +209,31 @@ export default function Dashboard() {
 
   if (loading) {
      return (
-       <div className="flex-1 flex items-center justify-center p-8">
-         <div className="flex flex-col items-center gap-4">
-           <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
-           <p className="text-slate-500 font-medium animate-pulse">Aggregating Live Data...</p>
+       <div className="space-y-6 animate-pulse">
+         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+           <div>
+             <div className="h-8 bg-slate-200 rounded w-48 mb-2"></div>
+             <div className="h-4 bg-slate-200 rounded w-64"></div>
+           </div>
+           <div className="h-10 bg-slate-200 rounded-xl w-32"></div>
+         </div>
+
+         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+           {[1, 2, 3].map((i) => (
+             <div key={i} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-32 flex flex-col justify-between">
+               <div className="flex justify-between items-start">
+                 <div className="h-4 bg-slate-200 rounded w-1/2"></div>
+                 <div className="h-8 w-8 bg-slate-200 rounded-full"></div>
+               </div>
+               <div className="h-8 bg-slate-200 rounded w-1/3"></div>
+             </div>
+           ))}
+         </div>
+
+         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+           <div className="lg:col-span-2 h-96 bg-white rounded-2xl border border-slate-200 shadow-sm"></div>
+           <div className="h-80 bg-white rounded-2xl border border-slate-200 shadow-sm"></div>
+           <div className="h-80 bg-white rounded-2xl border border-slate-200 shadow-sm"></div>
          </div>
        </div>
      );

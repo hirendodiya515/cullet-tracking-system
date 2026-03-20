@@ -91,8 +91,20 @@ export default function PlantLayout({ selectedStation, onSelect }) {
   return (
     <div className="flex flex-col items-center justify-center p-0 h-full w-full bg-slate-50 relative">
       {isLoading ? (
-        <div className="flex-1 w-full bg-white rounded-3xl border border-slate-200 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        <div className="relative w-full h-[60vh] sm:h-[70vh] bg-slate-50 rounded-3xl overflow-hidden shadow-inner border border-slate-200 flex items-center justify-center animate-pulse">
+           <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(#cbd5e1 2px, transparent 2px)', backgroundSize: '40px 40px' }} />
+           
+           <div className="relative z-10 flex flex-col items-center">
+             <div className="w-16 h-16 bg-slate-200 rounded-full shadow-sm"></div>
+             <div className="w-48 h-6 bg-slate-200 rounded mt-4 shadow-sm"></div>
+             
+             <div className="flex gap-16 mt-12 opacity-80">
+                <div className="w-32 h-24 bg-slate-200 rounded-xl shadow-sm"></div>
+                <div className="w-40 h-24 bg-slate-200 rounded-xl shadow-sm"></div>
+             </div>
+             
+             <div className="w-[400px] h-32 bg-slate-200 rounded-xl mt-12 shadow-sm opacity-60"></div>
+           </div>
         </div>
       ) : stations.length === 0 ? (
         <div className="flex-1 w-full bg-slate-100 rounded-3xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-500 p-8 text-center mt-4">
